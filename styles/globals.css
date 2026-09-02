@@ -762,6 +762,8 @@ button {
 .blocked { background: #171717; color: #fff; }
 .paused { background: #171717; color: #fff; }
 .maintain { background: #181818; color: #fff;}
+.under_review { background: rgba(255, 193, 7, 0.2); color: #ffc107; border: 1px solid rgba(255, 193, 7, 0.4); max-width: 100px !important; }
+.rejected { background: rgba(220, 53, 69, 0.2); color: #ff6b6b; border: 1px solid rgba(220, 53, 69, 0.4); }
 
 /* DOT */
 .menu-dot {

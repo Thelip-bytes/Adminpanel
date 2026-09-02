@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 import toast from "react-hot-toast";
@@ -16,6 +17,7 @@ export default function Cars() {
   const [toDate, setToDate] = useState(new Date());
 
   const [cars, setCars] = useState([]);
+  const [pendingCount, setPendingCount] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -111,12 +113,20 @@ export default function Cars() {
                 : `${STORAGE_BASE_URL}${primaryImage.image_url}`;
             }
 
+            let status = car.available_status ? 'live' : 'blocked';
+            if (car.verification_status === 'under_review') {
+              status = 'under_review';
+            } else if (car.verification_status === 'rejected') {
+              status = 'rejected';
+            }
+
             return {
               id: car.id,
               name: `${car.make} ${car.model}`,
               year: car.model_year,
               plate: car.registration_number,
-              status: car.available_status ? 'live' : 'blocked',
+              status,
+              verificationStatus: car.verification_status || 'approved',
               hostId: car.host_id || 'N/A',
               hostName: car.hosts?.full_name || 'N/A',
               hostPhone: car.hosts?.phone || 'N/A',
@@ -144,7 +154,18 @@ export default function Cars() {
       setIsLoading(false);
     }
     fetchCars(false);
-  }, []);
+
+    if (isAdmin) {
+      fetch(`/api/hub/cars/pending?t=${Date.now()}`)
+        .then((r) => r.json())
+        .then((d) => {
+          if (d.success && typeof d.count === 'number') {
+            setPendingCount(d.count);
+          }
+        })
+        .catch(() => {});
+    }
+  }, [isAdmin]);
 
   return (
     <div className="container">
@@ -177,6 +198,41 @@ export default function Cars() {
           )}
         </button>
       </div>
+
+      {/* Pending Vehicles Notification Banner */}
+      {isAdmin && pendingCount > 0 && (
+        <div style={{
+          background: 'linear-gradient(90deg, rgba(198,167,110,0.15) 0%, rgba(198,167,110,0.05) 100%)',
+          border: '1px solid rgba(198,167,110,0.4)',
+          borderRadius: '14px',
+          padding: '12px 18px',
+          marginBottom: '20px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          flexWrap: 'wrap',
+          gap: '10px'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <span style={{ fontSize: '18px' }}>⚡</span>
+            <span style={{ fontSize: '13px', color: '#e0e0e0', fontWeight: '500' }}>
+              <b>{pendingCount} new host vehicle{pendingCount > 1 ? 's' : ''}</b> awaiting image verification & pricing setup.
+            </span>
+          </div>
+          <Link href="/verify-cars" style={{
+            background: '#c6a76e',
+            color: '#000',
+            textDecoration: 'none',
+            fontSize: '12px',
+            fontWeight: '700',
+            padding: '6px 14px',
+            borderRadius: '10px',
+            display: 'inline-block'
+          }}>
+            Review Approvals →
+          </Link>
+        </div>
+      )}
 
       {/* ================= STATUS TOGGLE CONFIRM ================= */}
       {showStatusConfirm && selectedCar && (
@@ -336,7 +392,7 @@ export default function Cars() {
                   <span className="plate">{car.plate}</span>
                   <div className="status-row">
                     <span className={`status ${car.status}`}>
-                      {car.status}
+                      {car.status === 'under_review' ? 'under review' : car.status}
                     </span>
                     {(isAdmin || isHost) && (
                     <span

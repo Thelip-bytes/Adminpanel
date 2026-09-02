@@ -5,6 +5,7 @@ type VehicleNotification = {
   registrationNumber: string;
   hostName: string;
   hostPhone: string;
+  city: string;
 };
 
 export async function sendVehicleAddedTelegramNotification(notification: VehicleNotification) {
@@ -20,6 +21,7 @@ export async function sendVehicleAddedTelegramNotification(notification: Vehicle
     `Car: ${notification.make} ${notification.model}`,
     `Registration: ${notification.registrationNumber}`,
     `Vehicle code: ${notification.vehicleCode}`,
+    `City: ${notification.city || 'N/A'}`,
     `Host: ${notification.hostName}`,
     `Phone: +${notification.hostPhone}`,
     'Status: Awaiting admin pricing and activation',

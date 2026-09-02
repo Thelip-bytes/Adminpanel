@@ -1,13 +1,36 @@
 'use client'
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useRole } from '../lib/RoleContext'
 
 export default function Sidebar() {
   const path = usePathname()
   const [open, setOpen] = useState(false)
+  const [pendingCount, setPendingCount] = useState(0)
   const { isHost } = useRole()
+
+  const fetchPendingCount = async () => {
+    if (isHost) return;
+    try {
+      const res = await fetch(`/api/hub/cars/pending?t=${Date.now()}`);
+      if (res.ok) {
+        const json = await res.json();
+        if (json.success && typeof json.count === 'number') {
+          setPendingCount(json.count);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  useEffect(() => {
+    fetchPendingCount();
+    // Refresh periodically every 60s
+    const interval = setInterval(fetchPendingCount, 60000);
+    return () => clearInterval(interval);
+  }, [isHost, path]);
 
   const handleLogout = async () => {
     await fetch("/api/hub/logout", { method: "POST" }).catch(() => {});
@@ -53,6 +76,30 @@ export default function Sidebar() {
 
             {!isHost && (
               <Link href="/offline-booking" className={`item ${path==='/offline-booking'?'active':''}`} onClick={()=>setOpen(false)}>Offline Booking</Link>
+            )}
+
+            {!isHost && (
+              <Link 
+                href="/verify-cars" 
+                className={`item ${path==='/verify-cars'?'active':''}`} 
+                onClick={()=>setOpen(false)}
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}
+              >
+                <span>Verify Cars</span>
+                {pendingCount > 0 && (
+                  <span style={{
+                    background: '#c6a76e',
+                    color: '#000',
+                    fontSize: '11px',
+                    fontWeight: '700',
+                    padding: '2px 7px',
+                    borderRadius: '10px',
+                    lineHeight: '1.2'
+                  }}>
+                    {pendingCount}
+                  </span>
+                )}
+              </Link>
             )}
 
             <Link href="/profile" className={`item ${path==='/profile'?'active':''}`} onClick={()=>setOpen(false)}>Profile</Link>

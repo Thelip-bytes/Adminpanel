@@ -62,10 +62,11 @@ export default function AuthWrapper({ children }) {
 
       if (data.requiresRoleChoice) {
         setAvailableRoles(data.roles || []);
-      } else if (res.ok) {
+        toast("Please select your portal account", { icon: "ℹ️" });
+      } else if (res.ok && data.success) {
         setSelectedRole(data.role);
         setLoginStep(2);
-        toast.success("OTP sent to WhatsApp");
+        toast.success(`OTP sent to WhatsApp for ${data.role === 'host' ? 'Host' : 'Admin'} Portal`);
       } else {
         toast.error(data.error || "Access Denied");
       }
@@ -87,8 +88,10 @@ export default function AuthWrapper({ children }) {
       });
       const data = await res.json();
 
-      if (res.ok) {
+      if (res.ok && data.success) {
         sessionStorage.setItem("admin_info", JSON.stringify(data.admin));
+        // Notify RoleProvider immediately of role update
+        window.dispatchEvent(new Event("storage"));
         setAdminData(data.admin);
         setIsAdmin(true);
         toast.success(`Welcome, ${data.admin.name || "User"}`);
@@ -146,25 +149,66 @@ export default function AuthWrapper({ children }) {
                     placeholder="Enter 10-digit number"
                     style={{ paddingLeft: "3.5rem" }}
                     value={phone}
-                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, ""))}
-                    onKeyDown={(e) => e.key === "Enter" && handleCheckAdmin()}
+                    onChange={(e) => {
+                      setPhone(e.target.value.replace(/\D/g, ""));
+                      if (availableRoles.length > 0) {
+                        setAvailableRoles([]);
+                        setSelectedRole(null);
+                      }
+                    }}
+                    onKeyDown={(e) => e.key === "Enter" && handleRequestOtp()}
                     maxLength={12}
                   />
                 </div>
               </div>
+
               {availableRoles.length > 1 && (
-                <div className="login-tabs" aria-label="Choose portal">
-                  <button className={`login-tab ${selectedRole === 'admin' ? 'active' : ''}`} onClick={() => { setSelectedRole('admin'); handleRequestOtp('admin'); }} disabled={isLoggingIn}>Admin Portal</button>
-                  <button className={`login-tab ${selectedRole === 'host' ? 'active' : ''}`} onClick={() => { setSelectedRole('host'); handleRequestOtp('host'); }} disabled={isLoggingIn}>Host Portal</button>
+                <div style={{ margin: "16px 0" }}>
+                  <p style={{ fontSize: "12px", color: "#c6a76e", margin: "0 0 8px 0", textAlign: "center", fontWeight: "600" }}>
+                    Select which portal to access:
+                  </p>
+                  <div className="login-tabs" aria-label="Choose portal">
+                    <button
+                      type="button"
+                      className={`login-tab ${selectedRole === 'admin' ? 'active' : ''}`}
+                      onClick={() => { setSelectedRole('admin'); handleRequestOtp('admin'); }}
+                      disabled={isLoggingIn}
+                    >
+                      Admin Portal
+                    </button>
+                    <button
+                      type="button"
+                      className={`login-tab ${selectedRole === 'host' ? 'active' : ''}`}
+                      onClick={() => { setSelectedRole('host'); handleRequestOtp('host'); }}
+                      disabled={isLoggingIn}
+                    >
+                      Host Portal
+                    </button>
+                  </div>
                 </div>
               )}
-              <button className="portal-btn" onClick={() => handleRequestOtp()} disabled={isLoggingIn || availableRoles.length > 1}>
-                {isLoggingIn ? "Verifying..." : "Send Verification Code"}
-              </button>
+
+              {availableRoles.length <= 1 && (
+                <button
+                  type="button"
+                  className="portal-btn"
+                  onClick={() => handleRequestOtp()}
+                  disabled={isLoggingIn}
+                >
+                  {isLoggingIn ? "Sending Code..." : "Send Verification Code"}
+                </button>
+              )}
             </div>
           ) : (
             <div>
-              <p className="otp-sent-text">OTP sent to <strong>+91 {phone.replace(/^91/, "")}</strong></p>
+              <p className="otp-sent-text">
+                OTP sent to <strong>+91 {phone.replace(/^91/, "")}</strong>
+                {selectedRole && (
+                  <span style={{ display: "block", fontSize: "11px", color: "#c6a76e", marginTop: "4px" }}>
+                    Logging into: {selectedRole === 'host' ? 'Host Portal' : 'Admin Portal'}
+                  </span>
+                )}
+              </p>
               <div className="otp-display-group">
                 {otp.map((digit, i) => (
                   <input
@@ -178,7 +222,7 @@ export default function AuthWrapper({ children }) {
                   />
                 ))}
               </div>
-              <button className="portal-btn" onClick={() => handleVerifyOtp()} disabled={isLoggingIn}>
+              <button type="button" className="portal-btn" onClick={() => handleVerifyOtp()} disabled={isLoggingIn}>
                 {isLoggingIn ? "Verifying..." : "Access Portal"}
               </button>
               <p className="go-back-link" onClick={() => { setLoginStep(1); setOtp(["","","",""]); setSelectedRole(null); setAvailableRoles([]); }}>← Go Back</p>

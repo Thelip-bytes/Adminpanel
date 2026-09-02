@@ -52,6 +52,10 @@ export default function AddCarDetails() {
       setFormError("Enter the vehicle registration number to continue.");
       return;
     }
+    if (!form.description || form.description.trim().length < 168) {
+      setFormError(`Car description must have at least 168 characters (currently ${form.description.trim().length}/168).`);
+      return;
+    }
     if (isAdmin && (!form.baseDailyRate || Number(form.baseDailyRate) <= 0)) {
       setFormError("Enter a valid base daily price for this vehicle.");
       return;
@@ -134,18 +138,34 @@ export default function AddCarDetails() {
           </div>
 
           <div className="adding-car-field" style={{ gridColumn: "1 / -1" }}>
-            <label className="adding-car-label">Car Description</label>
+            <label className="adding-car-label">
+              Car Description <span className="adding-car-required">Min. 168 characters required</span>
+            </label>
             <textarea
               name="description"
-              maxLength={300}
-              rows={4}
+              maxLength={1000}
+              rows={5}
               className="adding-car-description"
-              placeholder="Write about your car (Maximum 300 characters)"
+              placeholder="Provide a detailed description of the car, condition, features, guidelines, and amenities (Minimum 168 characters required)"
               onChange={handleChange}
               value={form.description}
             />
-            <div className="adding-car-counter">
-              {form.description.length}/300
+            <div 
+              className="adding-car-counter"
+              style={{
+                color: form.description.trim().length < 168 ? '#d32f2f' : '#28a745',
+                fontWeight: '600',
+                display: 'flex',
+                justifyContent: 'space-between',
+                marginTop: '4px'
+              }}
+            >
+              <span>{form.description.trim().length}/168 characters</span>
+              <span>
+                {form.description.trim().length < 168 
+                  ? `(${168 - form.description.trim().length} more characters needed)` 
+                  : '✓ Minimum length satisfied'}
+              </span>
             </div>
           </div>
 

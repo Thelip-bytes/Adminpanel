@@ -28,6 +28,8 @@ export async function GET(request) {
         model_year,
         registration_number,
         available_status,
+        verification_status,
+        base_daily_rate,
         location_name,
         host_id,
         hosts (
@@ -45,6 +47,9 @@ export async function GET(request) {
     // If host is logged in, filter vehicles to only show their own
     if (user.role === 'host') {
       query = query.eq('host_id', user.sub);
+    } else {
+      // For Admin/Operator fleet view, only return verified/approved vehicles (or legacy nulls)
+      query = query.or('verification_status.eq.approved,verification_status.is.null');
     }
 
     const { data: vehicles, error } = await query.order('created_at', { ascending: false });

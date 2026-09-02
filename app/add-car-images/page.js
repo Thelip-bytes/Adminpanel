@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { compressImage, formatBytes } from "../../lib/imageCompressor";
 import "./addcarimages.css";
 import "../add-car-flow.css";
 
@@ -27,6 +28,22 @@ export default function AddCarImages() {
     inside: ""
   });
 
+  const [compressing, setCompressing] = useState({
+    main: false,
+    front: false,
+    back: false,
+    side: false,
+    inside: false
+  });
+
+  const [compressionStats, setCompressionStats] = useState({
+    main: null,
+    front: null,
+    back: null,
+    side: null,
+    inside: null
+  });
+
   const [showSuccess, setShowSuccess] = useState(false);
   const [formError, setFormError] = useState("");
 
@@ -34,33 +51,69 @@ export default function AddCarImages() {
     Object.values(preview).forEach((url) => url && URL.revokeObjectURL(url));
   }, [preview]);
 
-  const handleImage = (e, key) => {
+  const handleImage = async (e, key) => {
     const file = e.target.files[0];
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      setFormError("Choose an image file (JPG, PNG, or WebP).");
+      setFormError("Please choose a valid image file (JPG, PNG, WebP, or HEIC).");
       e.target.value = "";
       return;
     }
-    if (file.size > 10 * 1024 * 1024) {
-      setFormError("Each image must be 10 MB or smaller.");
+
+    // High upper limit (50MB) since client will compress it down to ~300KB
+    if (file.size > 50 * 1024 * 1024) {
+      setFormError("The selected image is over 50 MB. Please choose a smaller photo.");
       e.target.value = "";
       return;
     }
 
     setFormError("");
-    if (preview[key]) URL.revokeObjectURL(preview[key]);
+    setCompressing((prev) => ({ ...prev, [key]: true }));
 
-    setImages((prev) => ({
-      ...prev,
-      [key]: file
-    }));
+    try {
+      // Compress large photos to lightweight WebP (max 1920x1080, quality 0.82)
+      const result = await compressImage(file, {
+        maxWidth: 1920,
+        maxHeight: 1080,
+        quality: 0.82,
+        targetType: 'image/webp'
+      });
 
-    setPreview((prev) => ({
-      ...prev,
-      [key]: URL.createObjectURL(file)
-    }));
+      if (preview[key]) URL.revokeObjectURL(preview[key]);
+
+      setImages((prev) => ({
+        ...prev,
+        [key]: result.file
+      }));
+
+      setPreview((prev) => ({
+        ...prev,
+        [key]: result.previewUrl
+      }));
+
+      setCompressionStats((prev) => ({
+        ...prev,
+        [key]: {
+          original: formatBytes(result.originalSize),
+          compressed: formatBytes(result.compressedSize),
+          saved: result.compressionRatio
+        }
+      }));
+    } catch (err) {
+      console.error("Image compression error:", err);
+      // Fallback to original file if compression somehow fails
+      setImages((prev) => ({
+        ...prev,
+        [key]: file
+      }));
+      setPreview((prev) => ({
+        ...prev,
+        [key]: URL.createObjectURL(file)
+      }));
+    } finally {
+      setCompressing((prev) => ({ ...prev, [key]: false }));
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -90,6 +143,11 @@ export default function AddCarImages() {
       const step1 = JSON.parse(step1Raw);
       const step2 = JSON.parse(step2Raw);
       const step3 = JSON.parse(step3Raw);
+
+      if (!step2.description || step2.description.trim().length < 168) {
+        setFormError(`Car description must be at least 168 characters (currently ${step2.description?.trim().length || 0}/168). Please go back to step 2 to complete it.`);
+        return;
+      }
 
       setIsSubmitting(true);
 
@@ -127,7 +185,7 @@ export default function AddCarImages() {
           .join(", ") || "Hub Location"
       );
 
-      // Image files
+      // Image files (lightweight WebP blobs)
       if (images.main) formData.append("main", images.main);
       if (images.front) formData.append("front", images.front);
       if (images.back) formData.append("rear", images.back); // map back to rear
@@ -150,9 +208,9 @@ export default function AddCarImages() {
         setShowSuccess(true);
         setTimeout(() => {
           router.push("/cars");
-        }, 2200);
+        }, 2400);
       } else {
-        setFormError(data.error || "We could not add this vehicle. Your details and photos are still here, so you can try again.");
+        setFormError(data.error || "We could not add this vehicle. Your details and photos are preserved, please try again.");
       }
     } catch (err) {
       console.error("Add vehicle submit error:", err);
@@ -162,27 +220,61 @@ export default function AddCarImages() {
     }
   };
 
-  const UploadBox = (title, key, required = false) => (
-    <div className="adding-car-upload-field">
-      <label className="adding-car-label">{title}{required && <span className="adding-car-required">Required</span>}</label>
-      <label className="adding-car-upload-box">
-        {preview[key] ? (
-          <img src={preview[key]} className="adding-car-preview" alt={`${title} preview`} />
-        ) : (
-          <>
-            <div className="adding-car-upload-icon">☁</div>
-            <span className="adding-car-upload-btn">Upload File</span>
-          </>
+  const UploadBox = (title, key, required = false) => {
+    const isCurrentlyCompressing = compressing[key];
+    const stat = compressionStats[key];
+
+    return (
+      <div className="adding-car-upload-field">
+        <label className="adding-car-label">
+          {title}
+          {required && <span className="adding-car-required">Required</span>}
+        </label>
+        <label className="adding-car-upload-box" style={{ position: 'relative' }}>
+          {isCurrentlyCompressing ? (
+            <div style={{ textAlign: 'center', padding: '15px 0' }}>
+              <div className="adding-car-upload-icon" style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>⚡</div>
+              <div style={{ fontSize: '12px', color: '#c6a76e', fontWeight: '600', marginTop: '4px' }}>
+                Optimizing Photo...
+              </div>
+            </div>
+          ) : preview[key] ? (
+            <img src={preview[key]} className="adding-car-preview" alt={`${title} preview`} />
+          ) : (
+            <>
+              <div className="adding-car-upload-icon">☁</div>
+              <span className="adding-car-upload-btn">Upload File</span>
+            </>
+          )}
+          <input
+            type="file"
+            accept="image/*"
+            hidden
+            disabled={isCurrentlyCompressing}
+            onChange={(e) => handleImage(e, key)}
+          />
+        </label>
+
+        {/* Compression Statistics Badge */}
+        {stat && !isCurrentlyCompressing && (
+          <div style={{ 
+            fontSize: '11px', 
+            color: '#c6a76e', 
+            marginTop: '4px', 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '6px' 
+          }}>
+            <span>✓ Compressed:</span>
+            <span style={{ color: '#888', textDecoration: 'line-through' }}>{stat.original}</span>
+            <span>→</span>
+            <span style={{ color: '#28a745', fontWeight: '600' }}>{stat.compressed}</span>
+            {stat.saved > 0 && <span style={{ color: '#28a745' }}>(-{stat.saved}%)</span>}
+          </div>
         )}
-        <input
-          type="file"
-          accept="image/*"
-          hidden
-          onChange={(e) => handleImage(e, key)}
-        />
-      </label>
-    </div>
-  );
+      </div>
+    );
+  };
 
   return (
     <div className="adding-car-page">
@@ -191,7 +283,7 @@ export default function AddCarImages() {
         <div className="adding-car-header">
           <h1 className="adding-car-title">Provide Your Vehicle Photos</h1>
           <p className="adding-car-subtitle">
-            Add a clear cover photo and any additional angles you have. Your car stays unavailable until an admin reviews and prices it.
+            Add a clear cover photo and all recommended angles. Large camera photos will be automatically optimized before upload.
           </p>
         </div>
 
@@ -221,7 +313,7 @@ export default function AddCarImages() {
             <button
               type="submit"
               className="adding-car-btn"
-              disabled={isSubmitting}
+              disabled={isSubmitting || Object.values(compressing).some(Boolean)}
             >
               {isSubmitting ? "UPLOADING & SAVING..." : "FINALIZE AND ADD"}
             </button>
@@ -233,9 +325,9 @@ export default function AddCarImages() {
         <div className="adding-car-success-overlay">
           <div className="adding-car-success-box">
             <div className="adding-car-success-icon">✓</div>
-            <h2 className="adding-car-success-h">Car Added Successfully</h2>
+            <h2 className="adding-car-success-h">Car Submitted Successfully</h2>
             <p className="adding-car-success-p">
-              Your vehicle has been added successfully.
+              Your vehicle has been submitted for admin verification and pricing setup. Once approved, it will go live on Miles!
             </p>
           </div>
         </div>

@@ -137,6 +137,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Make, model, and registration number are required' }, { status: 400 });
     }
 
+    if (!description || description.length < 168) {
+      return NextResponse.json({
+        error: `Car description must be at least 168 characters (currently ${description.length}/168).`
+      }, { status: 400 });
+    }
+
     if (isAdmin && (base_daily_rate === null || !Number.isFinite(base_daily_rate) || base_daily_rate <= 0)) {
       return NextResponse.json({ error: 'Admins must provide a valid base daily price' }, { status: 400 });
     }
@@ -221,7 +227,8 @@ export async function POST(request: Request) {
           mileage_kmpl,
           description,
           base_daily_rate: isAdmin ? base_daily_rate : null,
-          available_status: false,
+          available_status: isAdmin ? true : false,
+          verification_status: isAdmin ? 'approved' : 'under_review',
         },
       ])
       .select()
@@ -330,6 +337,7 @@ export async function POST(request: Request) {
         registrationNumber: registration_number,
         hostName: hostRecord.full_name,
         hostPhone: hostRecord.phone,
+        city: city || 'Bengaluru',
       });
     }
 

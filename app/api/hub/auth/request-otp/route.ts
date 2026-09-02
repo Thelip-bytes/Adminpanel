@@ -23,11 +23,19 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Unable to check this phone number. Please try again.' }, { status: 500 });
     }
 
-    const roles = [adminResult.data?.length ? 'admin' : null, hostResult.data?.length ? 'host' : null].filter(Boolean);
+    const roles = [adminResult.data?.length ? 'admin' : null, hostResult.data?.length ? 'host' : null].filter(Boolean) as string[];
     if (roles.length === 0) return NextResponse.json({ error: 'This phone number is not registered for portal access' }, { status: 403 });
-    if (!role && roles.length > 1) return NextResponse.json({ requiresRoleChoice: true, roles });
-    if (role !== 'admin' && role !== 'host') return NextResponse.json({ error: 'Select the portal you want to access' }, { status: 400 });
-    if (!roles.includes(role)) return NextResponse.json({ error: 'This phone number does not have access to that portal' }, { status: 403 });
+
+    let targetRole = role;
+    if (!targetRole) {
+      if (roles.length > 1) {
+        return NextResponse.json({ requiresRoleChoice: true, roles });
+      }
+      targetRole = roles[0];
+    }
+
+    if (targetRole !== 'admin' && targetRole !== 'host') return NextResponse.json({ error: 'Select the portal you want to access' }, { status: 400 });
+    if (!roles.includes(targetRole)) return NextResponse.json({ error: 'This phone number does not have access to that portal' }, { status: 403 });
 
     const { data: lastOtp } = await supabase.from('otp_events').select('created_at').eq('phone', normalized.e164).order('created_at', { ascending: false }).limit(1);
     if (lastOtp?.length) {
@@ -48,7 +56,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'Message provider error' }, { status: 500 });
     }
 
-    return NextResponse.json({ success: true, role });
+    return NextResponse.json({ success: true, role: targetRole });
   } catch (error) {
     console.error('Unified OTP request error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
